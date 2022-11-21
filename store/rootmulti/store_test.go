@@ -13,6 +13,7 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	codecTypes "github.com/cosmos/cosmos-sdk/codec/types"
+	"github.com/cosmos/cosmos-sdk/store/cache"
 	"github.com/cosmos/cosmos-sdk/store/cachemulti"
 	"github.com/cosmos/cosmos-sdk/store/iavl"
 	sdkmaps "github.com/cosmos/cosmos-sdk/store/internal/maps"
@@ -26,6 +27,30 @@ func TestStoreType(t *testing.T) {
 	db := dbm.NewMemDB()
 	store := NewStore(db, log.NewNopLogger())
 	store.MountStoreWithDB(types.NewKVStoreKey("store1"), types.StoreTypeIAVL, db)
+}
+
+func TestUnwrapFails(t *testing.T) {
+	var db dbm.DB = dbm.NewMemDB()
+
+	ms := NewStore(db, log.NewNopLogger())
+	mngr := cache.NewCommitKVStoreCacheManager(cache.DefaultCommitKVStoreCacheSize)
+	ms.SetInterBlockCache(mngr)
+	ms.SetPruning(pruningtypes.NewPruningOptions(pruningtypes.PruningDefault))
+
+	ms.MountStoreWithDB(testStoreKey1, types.StoreTypeIAVL, nil)
+
+	err := ms.LoadLatestVersion()
+	require.Nil(t, err)
+
+	store1 := ms.GetCommitKVStore(testStoreKey1) // unwraps the inter-block cache
+	_, ok := store1.(*cache.CommitKVStoreCache)
+	require.False(t, ok)
+
+	ms.SetInterBlockCache(nil)
+
+	store1 = ms.GetCommitKVStore(testStoreKey1) // unwraps the inter-block cache? (no!!)
+	_, ok = store1.(*cache.CommitKVStoreCache)
+	require.False(t, ok) // FAILS
 }
 
 func TestGetCommitKVStore(t *testing.T) {
